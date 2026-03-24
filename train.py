@@ -11,7 +11,11 @@ from torchvision import datasets, transforms, models
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "file:./mlruns"))
+tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
+if not tracking_uri:
+    raise ValueError("MLFLOW_TRACKING_URI is not set")
+
+mlflow.set_tracking_uri(tracking_uri)
 mlflow.set_experiment("Assignment5_Pipeline")
 
 zip_path = Path("Agriculture.zip")
