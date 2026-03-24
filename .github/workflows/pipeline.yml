@@ -57,7 +57,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      MLFLOW_TRACKING_URI: file:./mlruns
+        MLFLOW_TRACKING_URI: file:${{ github.workspace }}/mlruns
 
     steps:
       - name: Checkout repository
@@ -83,7 +83,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: mlruns-artifact
-          path: mlruns
+          path: .
 
       - name: Show downloaded Run ID
         run: |
