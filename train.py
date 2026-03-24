@@ -86,8 +86,8 @@ val_dataset_full = datasets.ImageFolder(dataset_root, transform=val_transform)
 train_dataset = Subset(train_dataset_full, train_idx.indices)
 val_dataset = Subset(val_dataset_full, val_idx.indices)
 
-train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True, num_workers=2, pin_memory=True)
-val_loader = DataLoader(val_dataset, batch_size=16, shuffle=False, num_workers=2, pin_memory=True)
+train_loader = DataLoader(train_dataset, batch_size=8, shuffle=True, num_workers=2, pin_memory=False)
+val_loader = DataLoader(val_dataset, batch_size=8, shuffle=False, num_workers=2, pin_memory=False)
 
 weights = models.EfficientNet_B3_Weights.DEFAULT
 model = models.efficientnet_b3(weights=weights)
@@ -97,10 +97,10 @@ for param in model.parameters():
 
 in_features = model.classifier[1].in_features
 model.classifier = nn.Sequential(
-    nn.Dropout(p=0.4, inplace=True),
+    nn.Dropout(p=0.4, inplace=False),
     nn.Linear(in_features, 512),
-    nn.ReLU(),
-    nn.Dropout(p=0.3, inplace=True),
+    nn.ReLU(inplace=False),
+    nn.Dropout(p=0.3, inplace=False),
     nn.Linear(512, num_classes)
 )
 
@@ -118,6 +118,13 @@ optimizer = optim.AdamW(
     filter(lambda p: p.requires_grad, model.parameters()),
     lr=learning_rate,
     weight_decay=1e-4
+)
+
+scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+    optimizer,
+    mode="max",
+    factor=0.5,
+    patience=2
 )
 
 epochs = 3
