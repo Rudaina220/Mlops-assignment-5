@@ -16,7 +16,7 @@ if not tracking_uri:
     raise ValueError("MLFLOW_TRACKING_URI is not set")
 
 mlflow.set_tracking_uri(tracking_uri)
-mlflow.set_experiment("Assignment5_Pipeline")
+mlflow.set_experiment("Assignment5_Mlops")
 
 zip_path = Path("Agriculture.zip")
 extract_root = Path("data")
@@ -134,7 +134,7 @@ with mlflow.start_run() as run:
         mlflow.log_metric("train_accuracy", train_acc, step=epoch)
         mlflow.log_metric("accuracy", val_acc, step=epoch)
 
-    mlflow.pytorch.log_model(model, "model")
+    mlflow.pytorch.log_model(model, name="model")
 
     with open("model_info.txt", "w") as f:
         f.write(run.info.run_id)
