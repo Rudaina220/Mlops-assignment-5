@@ -1,67 +1,85 @@
-import os
-import zipfile
-from pathlib import Path
+name: Mlops 5
 
-import mlflow
-import torch
-from torch import nn, optim
-from torch.utils.data import DataLoader, random_split
-from torchvision import datasets, transforms, models
+on:
+  push:
+    branches:
+      - main
+  pull_request:
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
-mlflow.set_tracking_uri(tracking_uri)
-mlflow.set_experiment("Assignment5_Nature")
+jobs:
+  validate:
+    runs-on: ubuntu-latest
 
-zip_path = Path("nature.zip")
-extract_root = Path("data")
+    env:
+      MLFLOW_TRACKING_URI: ${{ secrets.mlflow_uri }}
 
-if not extract_root.exists():
-    with zipfile.ZipFile(zip_path, "r") as z:
-        z.extractall(extract_root)
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-dataset = datasets.ImageFolder(
-    "data/natural_images",
-    transform=transforms.Compose([
-        transforms.Resize((224,224)),
-        transforms.ToTensor()
-    ])
-)
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
 
-train_size = int(0.8 * len(dataset))
-val_size = len(dataset) - train_size
-train_ds, val_ds = random_split(dataset,[train_size,val_size])
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          
+      - name: Pull data with DVC
+        run: dvc pull
 
-train_loader = DataLoader(train_ds,batch_size=32,shuffle=True)
-val_loader = DataLoader(val_ds,batch_size=32)
+      - name: Train model and log to MLflow
+        run: python train.py
 
-model = models.resnet18(weights="IMAGENET1K_V1")
-model.fc = nn.Linear(model.fc.in_features,len(dataset.classes))
-model = model.to(device)
+      - name: Verify model_info.txt exists
+        run: |
+          test -f model_info.txt || (echo "model_info.txt not found" && exit 1)
+          echo "Run ID stored in model_info.txt:"
+          cat model_info.txt
 
-criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters(),lr=0.0003)
+      - name: Upload model_info.txt artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-info
+          path: model_info.txt
 
-epochs = 3
+  deploy:
+    needs: validate
+    runs-on: ubuntu-latest
 
-with mlflow.start_run() as run:
+    env:
+      MLFLOW_TRACKING_URI: ${{ secrets.mlflow_uri }}
 
-    for epoch in range(epochs):
-        model.train()
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-        for imgs,labels in train_loader:
-            imgs,labels = imgs.to(device),labels.to(device)
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
 
-            optimizer.zero_grad()
-            out = model(imgs)
-            loss = criterion(out,labels)
-            loss.backward()
-            optimizer.step()
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
 
-        print("Epoch",epoch,"done")
+      - name: Download model_info.txt
+        uses: actions/download-artifact@v4
+        with:
+          name: model-info
+          path: .
 
-    print("Run ID:",run.info.run_id)
+      - name: Show downloaded Run ID
+        run: cat model_info.txt
 
-    with open("model_info.txt","w") as f:
-        f.write(run.info.run_id)
+      - name: Check threshold in MLflow
+        run: python check.py
+
+      - name: Mock Build
+        run: |
+          echo "Building Docker image for Run ID: $(cat model_info.txt)"
+
+      - name: Docker build
+        run: docker build --build-arg RUN_ID=$(cat model_info.txt) -t my-model:latest .
