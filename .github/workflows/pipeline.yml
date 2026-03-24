@@ -83,7 +83,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: mlruns-artifact
-          path: .
+          path: mlruns
 
       - name: Show downloaded Run ID
         run: |
