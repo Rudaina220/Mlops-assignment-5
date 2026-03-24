@@ -40,6 +40,10 @@ jobs:
           echo "Run ID stored in model_info.txt:"
           cat model_info.txt
 
+      - name: Prepare mlruns for artifact
+        run: |
+          mkdir -p mlruns
+
       - name: Upload model_info.txt artifact
         uses: actions/upload-artifact@v4
         with:
@@ -57,7 +61,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-        MLFLOW_TRACKING_URI: file:${{ github.workspace }}/mlruns
+      MLFLOW_TRACKING_URI: file:./mlruns
 
     steps:
       - name: Checkout repository
@@ -83,12 +87,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: mlruns-artifact
-          path: .
-
-      - name: Show downloaded Run ID
-        run: |
-          echo "Downloaded Run ID:"
-          cat model_info.txt
+          path: ./mlruns
 
       - name: Check threshold in MLflow
         run: python check.py
