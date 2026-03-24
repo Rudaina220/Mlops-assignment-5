@@ -56,42 +56,69 @@ def find_imagefolder_root(base_path: Path):
 
 dataset_root = find_imagefolder_root(extract_root)
 
-transform = transforms.Compose([
+train_transform = transforms.Compose([
     transforms.Resize((224, 224)),
+    transforms.RandomHorizontalFlip(),
+    transforms.RandomRotation(10),
+    transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
     transforms.ToTensor(),
+    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
 ])
 
-full_dataset = datasets.ImageFolder(dataset_root, transform=transform)
+val_transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+])
 
-num_classes = len(full_dataset.classes)
+base_dataset = datasets.ImageFolder(dataset_root)
+
+num_classes = len(base_dataset.classes)
 if num_classes < 2:
     raise ValueError("Dataset must contain at least 2 classes")
 
-train_size = int(0.8 * len(full_dataset))
-val_size = len(full_dataset) - train_size
+train_size = int(0.8 * len(base_dataset))
+val_size = len(base_dataset) - train_size
 train_dataset, val_dataset = random_split(
-    full_dataset,
+    base_dataset,
     [train_size, val_size],
     generator=torch.Generator().manual_seed(42)
 )
 
-train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
+train_dataset.dataset.transform = train_transform
+val_dataset.dataset.transform = val_transform
+
+train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, num_workers=2)
+val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False, num_workers=2)
 
 model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
-model.fc = nn.Linear(model.fc.in_features, num_classes)
+
+for param in model.parameters():
+    param.requires_grad = False
+
+model.fc = nn.Sequential(
+    nn.Dropout(0.3),
+    nn.Linear(model.fc.in_features, num_classes)
+)
+
+for param in model.fc.parameters():
+    param.requires_grad = True
+
 model = model.to(device)
 
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters(), lr=0.001)
+learning_rate = 0.0001
+optimizer = optim.Adam(model.fc.parameters(), lr=learning_rate)
 epochs = 10
+best_val_acc = 0.0
 
 with mlflow.start_run() as run:
     mlflow.log_param("epochs", epochs)
     mlflow.log_param("batch_size", 32)
-    mlflow.log_param("learning_rate", 0.0001)
+    mlflow.log_param("learning_rate", learning_rate)
     mlflow.log_param("dataset_root", str(dataset_root))
     mlflow.log_param("num_classes", num_classes)
+    mlflow.log_param("model", "resnet18_pretrained_frozen_backbone")
 
     for epoch in range(epochs):
         model.train()
@@ -129,15 +156,17 @@ with mlflow.start_run() as run:
                 val_correct += (predicted == labels).sum().item()
 
         val_acc = val_correct / val_total
+        best_val_acc = max(best_val_acc, val_acc)
 
         mlflow.log_metric("train_loss", train_loss, step=epoch)
         mlflow.log_metric("train_accuracy", train_acc, step=epoch)
         mlflow.log_metric("accuracy", val_acc, step=epoch)
-
-    mlflow.pytorch.log_model(model, name="model")
+        mlflow.log_metric("best_accuracy", best_val_acc, step=epoch)
 
     with open("model_info.txt", "w") as f:
         f.write(run.info.run_id)
 
     print(f"Run ID: {run.info.run_id}")
-    print(f"Accuracy: {val_acc}")
+    print(f"Accuracy: {best_val_acc}")
+
+    mlflow.log_metric("final_accuracy", best_val_acc)
