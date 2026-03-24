@@ -96,18 +96,15 @@ model.fc = nn.Sequential(
     nn.Linear(model.fc.in_features, num_classes)
 )
 
-for param in model.layer4.parameters():
-    param.requires_grad = True
-
 for param in model.fc.parameters():
     param.requires_grad = True
 
 model = model.to(device)
 
 criterion = nn.CrossEntropyLoss()
-learning_rate = 0.0001
+learning_rate = 0.001
 optimizer = optim.Adam(
-    filter(lambda p: p.requires_grad, model.parameters()), lr=0.0001)
+    filter(lambda p: p.requires_grad, model.parameters()), lr=0.001)
 epochs = 3
 best_val_acc = 0.0
 
