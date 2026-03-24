@@ -64,7 +64,6 @@ train_transform = transforms.Compose([
 val_transform = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
-    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
 ])
 
 base_dataset = datasets.ImageFolder(dataset_root)
@@ -109,7 +108,7 @@ criterion = nn.CrossEntropyLoss()
 learning_rate = 0.0001
 optimizer = optim.Adam(
     filter(lambda p: p.requires_grad, model.parameters()), lr=0.0001)
-epochs = 15
+epochs = 3
 best_val_acc = 0.0
 
 with mlflow.start_run() as run:
