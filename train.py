@@ -58,11 +58,7 @@ dataset_root = find_imagefolder_root(extract_root)
 
 train_transform = transforms.Compose([
     transforms.Resize((224, 224)),
-    transforms.RandomHorizontalFlip(),
-    transforms.RandomRotation(10),
-    transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
     transforms.ToTensor(),
-    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
 ])
 
 val_transform = transforms.Compose([
@@ -101,6 +97,9 @@ model.fc = nn.Sequential(
     nn.Linear(model.fc.in_features, num_classes)
 )
 
+for param in model.layer4.parameters():
+    param.requires_grad = True
+
 for param in model.fc.parameters():
     param.requires_grad = True
 
@@ -108,8 +107,9 @@ model = model.to(device)
 
 criterion = nn.CrossEntropyLoss()
 learning_rate = 0.0001
-optimizer = optim.Adam(model.fc.parameters(), lr=learning_rate)
-epochs = 10
+optimizer = optim.Adam(
+    filter(lambda p: p.requires_grad, model.parameters()), lr=0.0001)
+epochs = 15
 best_val_acc = 0.0
 
 with mlflow.start_run() as run:
