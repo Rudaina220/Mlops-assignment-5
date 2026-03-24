@@ -116,7 +116,15 @@ criterion = nn.CrossEntropyLoss()
 learning_rate = 0.0002
 optimizer = optim.AdamW(
     filter(lambda p: p.requires_grad, model.parameters()),
-    lr=learning_rate
+    lr=learning_rate,
+    weight_decay=1e-4
+)
+
+scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+    optimizer,
+    mode="max",
+    factor=0.5,
+    patience=2
 )
 
 epochs = 3
@@ -128,7 +136,6 @@ with mlflow.start_run() as run:
     mlflow.log_param("epochs", epochs)
     mlflow.log_param("batch_size", 16)
     mlflow.log_param("learning_rate", learning_rate)
-    mlflow.log_param("weight_decay", 1e-4)
     mlflow.log_param("num_classes", num_classes)
     mlflow.log_param("dataset_root", str(dataset_root))
     mlflow.log_param("image_size", 320)
@@ -163,8 +170,8 @@ with mlflow.start_run() as run:
 
         with torch.no_grad():
             for images, labels in val_loader:
-                images = images.to(device, non_blocking=True)
-                labels = labels.to(device, non_blocking=True)
+                images = images.to(device)
+                labels = labels.to(device)
 
                 outputs = model(images)
                 preds = outputs.argmax(dim=1)
