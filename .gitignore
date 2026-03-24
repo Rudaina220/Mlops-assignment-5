@@ -1,0 +1,10 @@
+mlflow.db
+.venv/ 
+/images
+.venv/
+nature.zip
+images/
+mlflow.db
+mlruns/
+__pycache__/
+*.pyc

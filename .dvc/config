@@ -1,0 +1,4 @@
+[core]
+    remote = koofr
+['remote "koofr"']
+    url = webdavs://app.koofr.net/dav/Koofr/images
