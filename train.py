@@ -78,18 +78,18 @@ train_dataset, val_dataset = random_split(
 train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
 val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
 
-model = models.resnet18(weights=None)
+model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
 model.fc = nn.Linear(model.fc.in_features, num_classes)
 model = model.to(device)
 
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
-epochs = 3
+epochs = 10
 
 with mlflow.start_run() as run:
     mlflow.log_param("epochs", epochs)
     mlflow.log_param("batch_size", 32)
-    mlflow.log_param("learning_rate", 0.001)
+    mlflow.log_param("learning_rate", 0.0001)
     mlflow.log_param("dataset_root", str(dataset_root))
     mlflow.log_param("num_classes", num_classes)
 
