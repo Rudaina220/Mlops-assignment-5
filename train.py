@@ -1,85 +1,168 @@
-name: Mlops 5
+import os
+from pathlib import Path
 
-on:
-  push:
-    branches:
-      - main
-  pull_request:
+import mlflow
+import torch
+from torch import nn, optim
+from torch.utils.data import DataLoader, random_split
+from torchvision import datasets, transforms, models
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-jobs:
-  validate:
-    runs-on: ubuntu-latest
+tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
+if not tracking_uri:
+    raise ValueError("MLFLOW_TRACKING_URI is not set")
 
-    env:
-      MLFLOW_TRACKING_URI: ${{ secrets.mlflow_uri }}
+mlflow.set_tracking_uri(tracking_uri)
+mlflow.set_experiment("Assignment5_NaturalImages")
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+data_root = Path("images")
+if not data_root.exists():
+    raise FileNotFoundError("images folder not found. Make sure dvc pull ran successfully.")
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
+train_transform = transforms.Compose([
+    transforms.Resize((256, 256)),
+    transforms.RandomResizedCrop(224, scale=(0.8, 1.0)),
+    transforms.RandomHorizontalFlip(),
+    transforms.RandomRotation(10),
+    transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.05),
+    transforms.ToTensor(),
+    transforms.Normalize([0.485, 0.456, 0.406],
+                         [0.229, 0.224, 0.225]),
+])
 
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-          
-      - name: Pull data with DVC
-        run: dvc pull
+val_transform = transforms.Compose([
+    transforms.Resize((256, 256)),
+    transforms.CenterCrop(224),
+    transforms.ToTensor(),
+    transforms.Normalize([0.485, 0.456, 0.406],
+                         [0.229, 0.224, 0.225]),
+])
 
-      - name: Train model and log to MLflow
-        run: python train.py
+full_dataset = datasets.ImageFolder(data_root)
+num_classes = len(full_dataset.classes)
 
-      - name: Verify model_info.txt exists
-        run: |
-          test -f model_info.txt || (echo "model_info.txt not found" && exit 1)
-          echo "Run ID stored in model_info.txt:"
-          cat model_info.txt
+train_size = int(0.8 * len(full_dataset))
+val_size = len(full_dataset) - train_size
 
-      - name: Upload model_info.txt artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: model-info
-          path: model_info.txt
+train_indices, val_indices = random_split(
+    range(len(full_dataset)),
+    [train_size, val_size],
+    generator=torch.Generator().manual_seed(42)
+)
 
-  deploy:
-    needs: validate
-    runs-on: ubuntu-latest
+train_dataset = torch.utils.data.Subset(
+    datasets.ImageFolder(data_root, transform=train_transform),
+    train_indices.indices
+)
 
-    env:
-      MLFLOW_TRACKING_URI: ${{ secrets.mlflow_uri }}
+val_dataset = torch.utils.data.Subset(
+    datasets.ImageFolder(data_root, transform=val_transform),
+    val_indices.indices
+)
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, num_workers=2)
+val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False, num_workers=2)
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
+model = models.efficientnet_b0(weights=models.EfficientNet_B0_Weights.DEFAULT)
 
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
+for param in model.parameters():
+    param.requires_grad = False
 
-      - name: Download model_info.txt
-        uses: actions/download-artifact@v4
-        with:
-          name: model-info
-          path: .
+for param in model.features[-2:].parameters():
+    param.requires_grad = True
 
-      - name: Show downloaded Run ID
-        run: cat model_info.txt
+in_features = model.classifier[1].in_features
+model.classifier = nn.Sequential(
+    nn.Dropout(0.3),
+    nn.Linear(in_features, 256),
+    nn.ReLU(),
+    nn.Dropout(0.2),
+    nn.Linear(256, num_classes)
+)
 
-      - name: Check threshold in MLflow
-        run: python check.py
+model = model.to(device)
 
-      - name: Mock Build
-        run: |
-          echo "Building Docker image for Run ID: $(cat model_info.txt)"
+criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
+optimizer = optim.AdamW(
+    filter(lambda p: p.requires_grad, model.parameters()),
+    lr=3e-4,
+    weight_decay=1e-4
+)
 
-      - name: Docker build
-        run: docker build --build-arg RUN_ID=$(cat model_info.txt) -t my-model:latest .
+scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+    optimizer, mode="max", factor=0.5, patience=2
+)
+
+epochs = 8
+best_val_acc = 0.0
+best_model_path = "best_model.pth"
+
+with mlflow.start_run() as run:
+    mlflow.log_param("model", "efficientnet_b0")
+    mlflow.log_param("epochs", epochs)
+    mlflow.log_param("batch_size", 32)
+    mlflow.log_param("learning_rate", 3e-4)
+    mlflow.log_param("num_classes", num_classes)
+
+    for epoch in range(epochs):
+        model.train()
+        train_loss = 0.0
+        train_correct = 0
+        train_total = 0
+
+        for images, labels in train_loader:
+            images, labels = images.to(device), labels.to(device)
+
+            optimizer.zero_grad()
+            outputs = model(images)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
+
+            train_loss += loss.item() * images.size(0)
+            train_correct += (outputs.argmax(1) == labels).sum().item()
+            train_total += labels.size(0)
+
+        train_acc = train_correct / train_total
+
+        model.eval()
+        val_loss = 0.0
+        val_correct = 0
+        val_total = 0
+
+        with torch.no_grad():
+            for images, labels in val_loader:
+                images, labels = images.to(device), labels.to(device)
+
+                outputs = model(images)
+                loss = criterion(outputs, labels)
+
+                val_loss += loss.item() * images.size(0)
+                val_correct += (outputs.argmax(1) == labels).sum().item()
+                val_total += labels.size(0)
+
+        val_acc = val_correct / val_total
+        scheduler.step(val_acc)
+
+        mlflow.log_metrics({
+            "train_loss": train_loss / train_total,
+            "train_accuracy": train_acc,
+            "val_loss": val_loss / val_total,
+            "val_accuracy": val_acc,
+        }, step=epoch)
+
+        print(f"Epoch {epoch+1}/{epochs} | Train Acc: {train_acc:.4f} | Val Acc: {val_acc:.4f}")
+
+        if val_acc > best_val_acc:
+            best_val_acc = val_acc
+            torch.save(model.state_dict(), best_model_path)
+
+    mlflow.log_metric("best_accuracy", best_val_acc)
+    mlflow.log_artifact(best_model_path)
+
+    with open("model_info.txt", "w") as f:
+        f.write(run.info.run_id)
+
+    print(f"Run ID: {run.info.run_id}")
+    print(f"Best Accuracy: {best_val_acc:.4f}")
