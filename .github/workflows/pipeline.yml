@@ -6,7 +6,6 @@ on:
       - main
   pull_request:
 
-
 jobs:
   validate:
     runs-on: ubuntu-latest
