@@ -112,20 +112,9 @@ for param in model.classifier.parameters():
 
 model = model.to(device)
 
-criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
-learning_rate = 2e-4
-optimizer = optim.AdamW(
-    filter(lambda p: p.requires_grad, model.parameters()),
-    lr=learning_rate,
-    weight_decay=1e-4
-)
-
-scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-    optimizer,
-    mode="max",
-    factor=0.5,
-    patience=2
-)
+criterion = nn.CrossEntropyLoss()
+learning_rate = 0.005
+optimizer = optim.AdamW(lr=learning_rate)
 
 epochs = 3
 best_val_acc = 0.0
