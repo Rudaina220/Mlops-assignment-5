@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      MLFLOW_TRACKING_URI: file:./mlruns
+      MLFLOW_TRACKING_URI: ${{ secrets.mlflow_uri }}
 
     steps:
       - name: Checkout repository
@@ -40,28 +40,18 @@ jobs:
           echo "Run ID stored in model_info.txt:"
           cat model_info.txt
 
-      - name: Prepare mlruns for artifact
-        run: |
-          mkdir -p mlruns
-
       - name: Upload model_info.txt artifact
         uses: actions/upload-artifact@v4
         with:
           name: model-info
           path: model_info.txt
 
-      - name: Upload mlruns artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: mlruns-artifact
-          path: mlruns
-
   deploy:
     needs: validate
     runs-on: ubuntu-latest
 
     env:
-      MLFLOW_TRACKING_URI: file:./mlruns
+      MLFLOW_TRACKING_URI: ${{ secrets.mlflow_uri }}
 
     steps:
       - name: Checkout repository
@@ -83,18 +73,14 @@ jobs:
           name: model-info
           path: .
 
-      - name: Download mlruns artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: mlruns-artifact
-          path: ./mlruns
+      - name: Show downloaded Run ID
+        run: cat model_info.txt
 
       - name: Check threshold in MLflow
         run: python check.py
 
       - name: Mock Build
-        run: |
-          echo "Building Docker image for Run ID: $(cat model_info.txt)"
+        run: echo "Building Docker image for Run ID: $(cat model_info.txt)"
 
       - name: Docker build
         run: docker build --build-arg RUN_ID=$(cat model_info.txt) -t my-model:latest .
