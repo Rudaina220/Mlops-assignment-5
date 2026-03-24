@@ -1,5 +1,7 @@
-mlflow
 torch
 torchvision
-pillow
+mlflow
 dvc
+dvc-webdav
+pillow
+scikit-learn
