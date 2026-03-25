@@ -35,7 +35,7 @@ class SingleFolderDataset(Dataset):
     def __getitem__(self, idx):
         img_path = self.image_paths[idx]
         image = Image.open(img_path).convert("RGB")
-        label = 0  # single class only
+        label = 0 
 
         if self.transform:
             image = self.transform(image)
