@@ -27,7 +27,12 @@ jobs:
           pip install -r requirements.txt
           pip install dvc-webdav
 
-      - name: Configure Koofr DVC remote auth
+      - name: Install dependencies
+        run: |
+            pip install -r requirements.txt
+            pip install dvc-webdav
+
+      - name: Configure Koofr authentication
         run: |
           dvc remote modify --local koofr user "${{ secrets.KOOFR_USER }}"
           dvc remote modify --local koofr password "${{ secrets.KOOFR_PASSWORD }}"
