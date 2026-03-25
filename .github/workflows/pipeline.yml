@@ -34,6 +34,8 @@ jobs:
 
       - name: Configure Koofr authentication
         run: |
+          test -n "${{ secrets.KOOFR_USER }}" || (echo "KOOFR_USER is missing" && exit 1)
+          test -n "${{ secrets.KOOFR_PASSWORD }}" || (echo "KOOFR_PASSWORD is missing" && exit 1)
           dvc remote modify --local koofr user "${{ secrets.KOOFR_USER }}"
           dvc remote modify --local koofr password "${{ secrets.KOOFR_PASSWORD }}"
 
