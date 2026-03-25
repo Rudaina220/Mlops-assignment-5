@@ -33,7 +33,7 @@ jobs:
           dvc remote modify --local koofr password "${{ secrets.KOOFR_PASSWORD }}"
 
       - name: Pull data with DVC
-        run: dvc pull
+        run: dvc pull -v
 
       - name: Verify images folder exists
         run: |
