@@ -26,11 +26,6 @@ jobs:
           pip install -r requirements.txt
           pip install dvc-webdav
 
-      - name: Install dependencies
-        run: |
-            pip install -r requirements.txt
-            pip install dvc-webdav
-
       - name: Configure Koofr authentication
         run: |
           test -n "${{ secrets.KOOFR_USER }}" || (echo "KOOFR_USER is missing" && exit 1)
