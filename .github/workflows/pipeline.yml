@@ -25,7 +25,6 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install dvc-webdav
 
       - name: Configure Koofr DVC remote auth
         run: |
